@@ -1,0 +1,13 @@
+build/
+_bin/
+*.o
+*.obj
+*.exe
+*.pdb
+*.lib
+*.a
+*.dll
+
+# Local operator payloads accidentally staged in place of the placeholder.
+# Anything matching this must be reviewed before commit.
+chimera/payload.h.local
