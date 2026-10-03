@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout loaders
+        uses: actions/checkout@v4
+        with:
+          path: loaders-src
+
+      - name: Checkout MDK
+        uses: actions/checkout@v4
+        with:
+          repository: sebafvs/mdk
+          ref: main
+          path: mdk
+
+      - name: Capture MDK SHA
+        id: mdk
+        run: |
+          cd mdk
+          echo "sha_full=$(git rev-parse HEAD)"           >> "$GITHUB_OUTPUT"
+          echo "sha_short=$(git rev-parse --short HEAD)"  >> "$GITHUB_OUTPUT"
+
+      - name: Overlay loaders into MDK
+        run: |
+          rm -rf mdk/loaders
+          cp -r loaders-src mdk/loaders
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build zip \
+            gcc-mingw-w64-x86-64-posix \
+            g++-mingw-w64-x86-64-posix \
+            mingw-w64-tools
+
+      - name: Build
+        run: |
+          cd mdk
+          cmake -B build -G Ninja \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres
+          ninja -C build
+
+      - name: Package
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          STAGE="loaders-${VERSION}"
+          mkdir -p "$STAGE"
+
+          shopt -s nullglob
+          for exe in mdk/build/loaders/*/*.exe; do
+            name=$(basename "$exe" .exe)
+            mkdir -p "$STAGE/$name"
+            cp "$exe" "$STAGE/$name/"
+            [ -f "loaders-src/$name/README.md" ] && cp "loaders-src/$name/README.md" "$STAGE/$name/"
+          done
+
+          cp loaders-src/README.md loaders-src/LICENSE "$STAGE/"
+          zip -r "${STAGE}.zip" "$STAGE"
+          echo "STAGE=$STAGE" >> "$GITHUB_ENV"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          gh release create "$VERSION" \
+            --title "loaders ${VERSION}" \
+            --notes "loaders ${VERSION} built against sebafvs/mdk@${{ steps.mdk.outputs.sha_short }}. Prebuilt example loader EXEs. See https://github.com/sebafvs/mdk for the library used to build these." \
+            "${STAGE}.zip"

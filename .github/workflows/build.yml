@@ -1,0 +1,55 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout loaders
+        uses: actions/checkout@v4
+        with:
+          path: loaders-src
+
+      - name: Checkout MDK
+        uses: actions/checkout@v4
+        with:
+          repository: sebafvs/mdk
+          ref: main
+          path: mdk
+
+      - name: Overlay loaders into MDK
+        run: |
+          rm -rf mdk/loaders
+          cp -r loaders-src mdk/loaders
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build \
+            gcc-mingw-w64-x86-64-posix \
+            g++-mingw-w64-x86-64-posix \
+            mingw-w64-tools
+
+      - name: Build
+        run: |
+          cd mdk
+          cmake -B build -G Ninja \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres
+          ninja -C build
+
+      - name: Verify loader binaries
+        run: |
+          shopt -s nullglob
+          exes=( mdk/build/loaders/*/*.exe )
+          if [ ${#exes[@]} -eq 0 ]; then
+            echo "No loader EXEs produced"; exit 1
+          fi
+          ls -la "${exes[@]}"
