@@ -78,6 +78,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF#refs/tags/}"
           gh release create "$VERSION" \
+            --repo "${{ github.repository }}" \
             --title "loaders ${VERSION}" \
             --notes "loaders ${VERSION} built against sebafvs/mdk@${{ steps.mdk.outputs.sha_short }}. Prebuilt example loader EXEs. See https://github.com/sebafvs/mdk for the library used to build these." \
             "${STAGE}.zip"
